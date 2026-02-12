@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG 轉 WebP (315x210 含留白)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h2 { margin-bottom: 1.5rem; color: #333; }
+
+        .upload-btn-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            margin-bottom: 1rem;
+        }
+
+        .btn {
+            border: 2px solid #007bff;
+            color: #007bff;
+            background-color: white;
+            padding: 8px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn:hover { background-color: #007bff; color: white; }
+
+        .upload-btn-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* 預覽區域樣式 */
+        .canvas-container {
+            margin: 20px auto;
+            border: 1px dashed #ccc;
+            /* 為了在螢幕上看得清楚，這裡僅做 CSS 顯示縮放，不影響實際輸出 */
+            display: inline-block;
+            background-image: linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee), 
+                              linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee);
+            background-position: 0 0, 10px 10px;
+            background-size: 20px 20px;
+        }
+
+        canvas {
+            display: block;
+            /* 實際尺寸由 HTML 屬性控制，CSS 僅確保它不會溢出容器 */
+            max-width: 100%;
+            height: auto;
+        }
+
+        #downloadBtn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            display: none; /* 預設隱藏，轉換成功後顯示 */
+        }
+        
+        #downloadBtn:hover { background-color: #218838; }
+
+        .info {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>SVG 轉 WebP 工具</h2>
+    <p class="info">輸出尺寸: 315x210 px | 留白: 26.25 px</p>
+
+    <div class="upload-btn-wrapper">
+        <button class="btn">選擇 SVG 檔案</button>
+        <input type="file" id="uploadInput" accept=".svg">
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="previewCanvas" width="315" height="210"></canvas>
+    </div>
+
+    <button id="downloadBtn">下載 WebP 圖片</button>
+</div>
+
+<script>
+    const uploadInput = document.getElementById('uploadInput');
+    const canvas = document.getElementById('previewCanvas');
+    const ctx = canvas.getContext('2d');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    // 設定常數
+    const CANVAS_WIDTH = 315;
+    const CANVAS_HEIGHT = 210;
+    const PADDING = 26.25;
+
+    // 計算繪圖的安全區域 (Safe Area)
+    // 寬度扣除左右 padding，高度扣除上下 padding
+    const DRAW_WIDTH = CANVAS_WIDTH - (PADDING * 2);  // 262.5
+    const DRAW_HEIGHT = CANVAS_HEIGHT - (PADDING * 2); // 157.5
+
+    uploadInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.type !== 'image/svg+xml') {
+            alert('請上傳 SVG 格式的檔案');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = new Image();
+            img.onload = function() {
+                // 1. 清除畫布
+                ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                // 2. 計算縮放比例 (Object-fit: contain 邏輯)
+                // 目標是讓圖片完整塞入 262.5 x 157.5 的框框內
+                const scale = Math.min(
+                    DRAW_WIDTH / img.width, 
+                    DRAW_HEIGHT / img.height
+                );
+
+                const w = img.width * scale;
+                const h = img.height * scale;
+
+                // 3. 計算置中位置 (Center)
+                // 左邊界 = Padding + (安全區寬 - 圖片實際寬) / 2
+                const x = PADDING + (DRAW_WIDTH - w) / 2;
+                const y = PADDING + (DRAW_HEIGHT - h) / 2;
+
+                // 4. 繪製圖片
+                ctx.drawImage(img, x, y, w, h);
+
+                // 5. 顯示下載按鈕並綁定事件
+                downloadBtn.style.display = 'inline-block';
+                downloadBtn.onclick = () => {
+                    const dataURL = canvas.toDataURL('image/webp', 0.9); // 0.9 為品質參數
+                    const link = document.createElement('a');
+                    link.download = `converted-${file.name.replace('.svg', '')}.webp`;
+                    link.href = dataURL;
+                    link.click();
+                };
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+</script>
+
+</body>
+</html>
